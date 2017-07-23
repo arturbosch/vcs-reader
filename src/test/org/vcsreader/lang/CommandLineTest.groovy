@@ -2,9 +2,8 @@ package org.vcsreader.lang
 
 import org.junit.Test
 
-import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.ExecutionException
+import java.util.concurrent.ForkJoinPool
 import java.util.concurrent.atomic.AtomicBoolean
 
 import static java.util.concurrent.Executors.newSingleThreadExecutor
@@ -13,14 +12,16 @@ import static org.junit.Assert.fail
 import static org.vcsreader.lang.CommandLine.exitCodeBeforeFinished
 
 class CommandLineTest {
-	@Test void "successful command line execution"() {
+	@Test
+	void "successful command line execution"() {
 		def commandLine = new CommandLine("ls").execute()
 		assert commandLine.stderr().empty
 		assert !commandLine.stdout().empty
 		assert commandLine.exitCode() == 0
 	}
 
-	@Test void "failed command line execution"() {
+	@Test
+	void "failed command line execution"() {
 		def commandLine = new CommandLine("fake-commandLine")
 		try {
 			commandLine.execute()
@@ -34,12 +35,14 @@ class CommandLineTest {
 		}
 	}
 
-	@Test void "command with failing task executor"() {
-		def failingExecutor = { Callable task, String taskName ->
-			def result = new FutureResult()
-			result.setException(new IllegalStateException())
-			result
-		} as CommandLine.AsyncExecutor
+	@Test
+	void "command with failing task executor"() {
+		def failingExecutor = new ForkJoinPool() {
+			@Override
+			void execute(Runnable task) {
+				throw new IllegalStateException()
+			}
+		}
 		def config = CommandLine.Config.defaults.asyncExecutor(failingExecutor)
 
 		def commandLine = new CommandLine(config, "ls")
@@ -47,8 +50,7 @@ class CommandLineTest {
 		try {
 			commandLine.execute()
 		} catch (CommandLine.Failure e) {
-			assert e.cause instanceof ExecutionException
-			assert e.cause.cause instanceof IllegalStateException
+			assert e.cause instanceof IllegalStateException
 			assert commandLine.stdout().empty
 			assert commandLine.stderr().empty
 			assert commandLine.exitCode() == exitCodeBeforeFinished
@@ -73,7 +75,8 @@ class CommandLineTest {
 		assert isDead.get()
 	}
 
-	@Test void "command description"() {
+	@Test
+	void "command description"() {
 		assert new CommandLine("ls", "-l").describe() == "ls -l"
 		assert new CommandLine("ls", "-l").workingDir("/").describe() == "ls -l (working directory '/')"
 	}

@@ -3,17 +3,22 @@ package org.vcsreader.lang;
 import org.jetbrains.annotations.NotNull;
 import org.mozilla.universalchardet.UniversalDetector;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Callable;
-import java.util.concurrent.Future;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.vcsreader.lang.StringUtil.shortened;
 
 public class CommandLine {
 	public static final int exitCodeBeforeFinished = Integer.MIN_VALUE;
@@ -62,8 +67,6 @@ public class CommandLine {
 	}
 
 	public CommandLine execute() throws Failure {
-		InputStream stdoutInputStream = null;
-		InputStream stderrInputStream = null;
 		Process process;
 		try {
 
@@ -72,35 +75,26 @@ public class CommandLine {
 			process = builder.start();
 			processRef.set(process);
 
-			stdoutInputStream = process.getInputStream();
-			stderrInputStream = process.getErrorStream();
+			try (final InputStream stdoutInputStream = process.getInputStream();
+				 final InputStream stderrInputStream = process.getErrorStream()) {
 
-			Future<String> stdoutFuture = config.asyncExecutor.submit(
-					readStreamTask(stdoutInputStream, config.stdoutBufferSize),
-					"stdout reader: " + shortened(describe(), 30)
-			);
-			Future<String> stderrFuture = config.asyncExecutor.submit(
-					readStreamTask(stderrInputStream, config.stderrBufferSize),
-					"stderr reader: " + shortened(describe(), 30)
-			);
+				CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(
+						() -> readStreamTask(stdoutInputStream, config.stdoutBufferSize), config.asyncExecutor);
+				CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(
+						() -> readStreamTask(stderrInputStream, config.stderrBufferSize), config.asyncExecutor);
 
-			stdout = stdoutFuture.get();
-			stderr = stderrFuture.get();
+				stdout = stdoutFuture.get();
+				stderr = stderrFuture.get();
 
-			process.waitFor();
-			stdoutInputStream.close();
-			stderrInputStream.close();
-
-			process.destroy();
-			exitCode = process.exitValue();
-
+				process.waitFor();
+				process.destroy();
+				exitCode = process.exitValue();
+			}
 		} catch (Exception e) {
 			throw new Failure(e);
 		} finally {
 			kill(); // Make sure process is stopped in case of exceptions in java code.
 			processRef.set(null);
-			close(stdoutInputStream);
-			close(stderrInputStream);
 		}
 
 		return this;
@@ -117,17 +111,20 @@ public class CommandLine {
 				for (int i = 0; i < 20 && process.isAlive(); i++) {
 					Thread.sleep(10);
 				}
-			} catch (InterruptedException ignored) {}
+			} catch (InterruptedException ignored) {
+			}
 			return !process.isAlive();
 		}
 		return true;
 	}
 
-	@NotNull public String stdout() {
+	@NotNull
+	public String stdout() {
 		return stdout;
 	}
 
-	@NotNull public String stderr() {
+	@NotNull
+	public String stderr() {
 		return stderr;
 	}
 
@@ -136,26 +133,29 @@ public class CommandLine {
 	}
 
 	public String describe() {
-		String result = "";
+		StringBuilder result = new StringBuilder();
 		for (int i = 0; i < commandAndArgs.length; i++) {
-			result += commandAndArgs[i];
-			if (i < commandAndArgs.length - 1) result += " ";
+			result.append(commandAndArgs[i]);
+			if (i < commandAndArgs.length - 1) result.append(" ");
 		}
 		if (config.workingDir != null) {
-			result += " (working directory '" + config.workingDir + "')";
+			result.append(" (working directory '").append(config.workingDir).append("')");
 		}
-		return result;
+		return result.toString();
 	}
 
-	@Override public String toString() {
+	@Override
+	public String toString() {
 		return describe();
 	}
 
-	private Callable<String> readStreamTask(final InputStream stdoutInputStream, final int inputBufferSize) {
-		return () -> {
+	private String readStreamTask(final InputStream stdoutInputStream, final int inputBufferSize) {
+		try {
 			byte[] bytes = readAsBytes(stdoutInputStream, inputBufferSize);
 			return convertToString(bytes);
-		};
+		} catch (IOException ex) {
+			throw new UncheckedIOException(ex);
+		}
 	}
 
 	private String convertToString(byte[] bytes) throws IOException {
@@ -198,38 +198,23 @@ public class CommandLine {
 		return command;
 	}
 
-	private static void close(Closeable reader) {
-		if (reader == null) return;
-		try {
-			reader.close();
-		} catch (IOException e) {
-			throw new Failure(e);
-		}
-	}
-
-
 	public static class Failure extends RuntimeException {
 		public Failure(Throwable cause) {
 			super(cause);
 		}
 	}
 
-
-	public interface AsyncExecutor {
-		<T> Future<T> submit(Callable<T> task, String taskName);
-	}
-
-
 	public static class Config {
 		private static final int defaultBufferSize = 8192;
 		private static final File currentDirectory = null;
-
+		private static final AtomicInteger threadCounter = new AtomicInteger(1);
 		public static Config defaults = new Config(
 				currentDirectory,
 				defaultBufferSize,
 				defaultBufferSize,
 				Charset.defaultCharset(), false, defaultBufferSize,
-				newExecutor()
+				Executors.newFixedThreadPool(ForkJoinPool.getCommonPoolParallelism(),
+						r -> new Thread(r, "stdout reader: " + threadCounter.getAndIncrement()))
 		);
 
 		private final File workingDir;
@@ -238,10 +223,10 @@ public class CommandLine {
 		private final Charset outputCharset;
 		private final boolean charsetAutoDetect;
 		private final int maxBufferForCharsetDetection;
-		private final AsyncExecutor asyncExecutor;
+		private final ExecutorService asyncExecutor;
 
 		public Config(File workingDir, int stdoutBufferSize, int stderrBufferSize, Charset outputCharset,
-		              boolean charsetAutoDetect, int maxBufferForCharsetDetection, AsyncExecutor asyncExecutor) {
+					  boolean charsetAutoDetect, int maxBufferForCharsetDetection, ExecutorService asyncExecutor) {
 			this.workingDir = workingDir;
 			this.stdoutBufferSize = stdoutBufferSize;
 			this.stderrBufferSize = stderrBufferSize;
@@ -263,27 +248,8 @@ public class CommandLine {
 			return new Config(workingDir, stdoutBufferSize, stderrBufferSize, charset, charsetAutoDetect, maxBufferForCharsetDetection, asyncExecutor);
 		}
 
-		public Config asyncExecutor(AsyncExecutor newAsyncExecutor) {
+		public Config asyncExecutor(ExecutorService newAsyncExecutor) {
 			return new Config(workingDir, stdoutBufferSize, stderrBufferSize, outputCharset, charsetAutoDetect, maxBufferForCharsetDetection, newAsyncExecutor);
-		}
-
-		private static AsyncExecutor newExecutor() {
-			return new AsyncExecutor() {
-				@Override public <T> Future<T> submit(Callable<T> task, String taskName) {
-					FutureResult<T> futureResult = new FutureResult<>();
-					Runnable runnable = () -> {
-						try {
-							futureResult.set(task.call());
-						} catch (Exception e) {
-							futureResult.setException(e);
-						}
-					};
-					Thread thread = new Thread(null, runnable, taskName);
-					thread.setDaemon(true);
-					thread.start();
-					return futureResult;
-				}
-			};
 		}
 	}
 }
