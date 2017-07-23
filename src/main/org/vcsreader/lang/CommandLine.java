@@ -214,7 +214,11 @@ public class CommandLine {
 				defaultBufferSize,
 				Charset.defaultCharset(), false, defaultBufferSize,
 				Executors.newFixedThreadPool(ForkJoinPool.getCommonPoolParallelism(),
-						r -> new Thread(r, "stdout reader: " + threadCounter.getAndIncrement()))
+						r -> {
+							Thread thread = new Thread(r, "stdout reader: " + threadCounter.getAndIncrement());
+							thread.setDaemon(true);
+							return thread;
+						})
 		);
 
 		private final File workingDir;
@@ -237,15 +241,18 @@ public class CommandLine {
 		}
 
 		public Config workingDir(File newWorkingDirectory) {
-			return new Config(newWorkingDirectory, stdoutBufferSize, stderrBufferSize, outputCharset, charsetAutoDetect, maxBufferForCharsetDetection, asyncExecutor);
+			return new Config(newWorkingDirectory, stdoutBufferSize, stderrBufferSize, outputCharset,
+					charsetAutoDetect, maxBufferForCharsetDetection, asyncExecutor);
 		}
 
 		public Config charsetAutoDetect(boolean value) {
-			return new Config(workingDir, stdoutBufferSize, stderrBufferSize, outputCharset, value, maxBufferForCharsetDetection, asyncExecutor);
+			return new Config(workingDir, stdoutBufferSize, stderrBufferSize, outputCharset, value,
+					maxBufferForCharsetDetection, asyncExecutor);
 		}
 
 		public Config outputCharset(Charset charset) {
-			return new Config(workingDir, stdoutBufferSize, stderrBufferSize, charset, charsetAutoDetect, maxBufferForCharsetDetection, asyncExecutor);
+			return new Config(workingDir, stdoutBufferSize, stderrBufferSize, charset, charsetAutoDetect,
+					maxBufferForCharsetDetection, asyncExecutor);
 		}
 
 		public Config asyncExecutor(ExecutorService newAsyncExecutor) {
