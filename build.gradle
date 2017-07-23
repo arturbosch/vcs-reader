@@ -1,7 +1,11 @@
+buildscript {
+	repositories { jcenter() }
+	dependencies { classpath 'com.github.jengelman.gradle.plugins:shadow:1.2.4' }
+}
+
 apply plugin: 'java'
 apply plugin: 'groovy'
 apply plugin: 'maven'
-apply plugin: 'signing'
 apply plugin: 'maven-publish'
 apply plugin: 'com.github.johnrengelman.shadow'
 
@@ -43,66 +47,22 @@ sourceSets {
 // See http://central.sonatype.org/pages/gradle.html
 //
 archivesBaseName = "vcsreader"
-task javadocWithLinks(type:Javadoc) {
+task javadocWithLinks(type: Javadoc) {
 	options {
 		links = ["."]
 	}
 }
-task javadocJar(type:Jar) {
+task javadocJar(type: Jar) {
 	classifier = 'javadoc'
 	from javadocWithLinks
 }
-task sourcesJar(type:Jar) {
+task sourcesJar(type: Jar) {
 	classifier = 'sources'
 	from sourceSets.main.allSource
 }
 artifacts {
 	archives javadocJar, sourcesJar, shadowJar
 }
-signing {
-	sign configurations.archives
-}
-uploadArchives {
-	repositories.mavenDeployer {
-		beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
-
-		repository(url:"https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
-			authentication(userName:ossrhUsername, password:ossrhPassword)
-		}
-		snapshotRepository(url:"https://oss.sonatype.org/content/repositories/snapshots/") {
-			authentication(userName:ossrhUsername, password:ossrhPassword)
-		}
-
-		pom.project {
-			name 'VCS Reader'
-			packaging 'jar'
-			description 'Minimal Java library for reading VCS commits (git, hg, svn)'
-			url 'http://vcsreader.org'
-
-			scm {
-				connection 'scm:git:https://github.com/dkandalov/vcs-reader.git'
-				developerConnection 'scm:git:https://github.com/dkandalov/vcs-reader.git'
-				url 'https://github.com/dkandalov/vcs-reader.git'
-			}
-			licenses {
-				license {
-					name 'The Apache License, Version 2.0'
-					url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
-				}
-			}
-			developers {
-				developer {
-					id 'dkandalov'
-					name 'Dmitry Kandalov'
-					email 'dmitry.kandalov@gmail.com'
-				}
-			}
-		}
-		pom.dependencies = []
-	}
-}
-// Clear dependencies before uploading archives assuming that they are shadowed.
-[uploadArchives.repositories.mavenDeployer]*.pom*.whenConfigured {pom -> pom.dependencies.clear() }
 
 //
 // Configuration for creating single jar (with all dependant packages renamed to avoid potential conflicts).
@@ -116,69 +76,4 @@ shadowJar {
 	relocate 'org.intellij', 'shadow.org.intellij'
 	relocate 'org.jetbrains', 'shadow.org.jetbrains'
 	relocate 'org.mozilla', 'shadow.org.mozilla'
-}
-publishing {
-	publications {
-		shadow(MavenPublication) {
-			from components.shadow
-		}
-	}
-	repositories {
-		mavenLocal()
-	}
-}
-buildscript {
-	repositories { jcenter() }
-	dependencies { classpath 'com.github.jengelman.gradle.plugins:shadow:1.2.4' }
-}
-
-//
-// Task for downloading all dependencies to 'lib' folder so that project could be built completely offline.
-//
-task downloadMavenDependencies() << {
-	copyAllMavenDependenciesTo("lib", [configurations.compile, configurations.testCompile])
-}
-
-def copyAllMavenDependenciesTo(String targetDirPath, Collection<Configuration> configurations) {
-	ant.delete(dir:targetDirPath)
-	for (def configuration : configurations) {
-		copyMavenDependenciesTo(targetDirPath, configuration)
-	}
-}
-
-def copyMavenDependenciesTo(String targetDirPath, Configuration configuration) {
-	def files = configuration.files
-	def allDependencies = allDependenciesOf(configuration.resolvedConfiguration)
-
-	def dependenciesInfo = allDependencies.collect { ResolvedDependency dependency ->
-		def relativePath = (dependency.moduleGroup.split("\\.") + [dependency.moduleName, dependency.moduleVersion]).join(File.separator)
-		[path:relativePath, fileName:dependency.moduleName + "-" + dependency.moduleVersion + ".jar"]
-	}
-	if (!files.collect { it.name }.containsAll(dependenciesInfo.collect { it.fileName })) {
-		throw new IllegalStateException(
-				"Expected files to contain all dependencies. But was\n" +
-				"files:\n${files.join("\n")}\n" +
-				"dependencies:\n${dependenciesInfo.join("\n")}"
-		)
-	}
-
-	dependenciesInfo.each { dependencyInfo ->
-		def file = files.find { it.name == dependencyInfo.fileName }
-		def dir = new File(targetDirPath + File.separator + dependencyInfo.path)
-		dir.mkdirs()
-		println("Copying: ${file.canonicalPath}")
-		new groovy.util.AntBuilder().copy(
-				file:file.canonicalPath,
-				todir:dir.canonicalPath
-		)
-	}
-}
-
-def allDependenciesOf(ResolvedConfiguration configuration) {
-	configuration.firstLevelModuleDependencies.collectMany { allDependenciesOf(it) }
-}
-
-def allDependenciesOf(ResolvedDependency dependency, Set result = []) {
-	if (result.containsAll(dependency.children)) [dependency]
-	else [dependency] + dependency.children.collectMany { child -> allDependenciesOf(child) }
 }
