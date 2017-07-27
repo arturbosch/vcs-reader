@@ -215,7 +215,7 @@ public class CommandLine {
 				Charset.defaultCharset(), false, defaultBufferSize,
 				Executors.newFixedThreadPool(ForkJoinPool.getCommonPoolParallelism(),
 						r -> {
-							Thread thread = new Thread(r, "stdout reader: " + threadCounter.getAndIncrement());
+							Thread thread = new Thread(r, "vcs-reader-thread-" + threadCounter.getAndIncrement());
 							thread.setDaemon(true);
 							return thread;
 						})
