@@ -15,9 +15,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class CommandLine {
@@ -158,7 +156,7 @@ public class CommandLine {
 		}
 	}
 
-	private String convertToString(byte[] bytes) throws IOException {
+	private String convertToString(byte[] bytes) {
 		Charset charset = config.charsetAutoDetect ?
 				detectCharset(bytes, config.maxBufferForCharsetDetection) :
 				config.outputCharset;
@@ -207,18 +205,12 @@ public class CommandLine {
 	public static class Config {
 		private static final int defaultBufferSize = 8192;
 		private static final File currentDirectory = null;
-		private static final AtomicInteger threadCounter = new AtomicInteger(1);
 		public static Config defaults = new Config(
 				currentDirectory,
 				defaultBufferSize,
 				defaultBufferSize,
 				Charset.defaultCharset(), false, defaultBufferSize,
-				Executors.newFixedThreadPool(ForkJoinPool.getCommonPoolParallelism(),
-						r -> {
-							Thread thread = new Thread(r, "vcs-reader-thread-" + threadCounter.getAndIncrement());
-							thread.setDaemon(true);
-							return thread;
-						})
+				ForkJoinPool.commonPool()
 		);
 
 		private final File workingDir;
