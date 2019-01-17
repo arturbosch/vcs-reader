@@ -1,10 +1,11 @@
 buildscript {
 	repositories { jcenter() }
-	dependencies { classpath 'com.github.jengelman.gradle.plugins:shadow:1.2.4' }
+	dependencies { classpath 'com.github.jengelman.gradle.plugins:shadow:4.0.3' }
 }
 
 plugins {
-	id "com.jfrog.bintray" version "1.8.0"
+	id "com.jfrog.bintray" version "1.8.4"
+	id 'com.github.ben-manes.versions' version '0.20.0'
 }
 
 apply plugin: 'java'
@@ -15,24 +16,21 @@ apply plugin: 'com.github.johnrengelman.shadow'
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
 group = "org.vcsreader"
-version = "1.1.1"
+version = "1.1.2"
 
 repositories {
 	mavenLocal()
 	mavenCentral()
-	// Use the following repository to fetch dependencies from 'lib' folder
-	// (has to be commented out before publishing to central.sonatype)
-	maven { url 'lib' }
 }
 
 dependencies {
 	// Use Java5 annotations because groovy can't compile Java8 @NotNull annotations.
-	compile "org.jetbrains:annotations-java5:15.0"
+	compile "org.jetbrains:annotations-java5:16.0.3"
 	compile "com.googlecode.juniversalchardet:juniversalchardet:1.0.3"
 	testCompile "org.hamcrest:hamcrest-all:1.3"
-	testCompile "junit:junit:4.11"
-	testCompile "org.codehaus.groovy:groovy-all:2.4.6"
-	testCompile "org.mockito:mockito-core:1.10.19"
+	testCompile "junit:junit:4.12"
+	testCompile "org.codehaus.groovy:groovy-all:3.0.0-alpha-4"
+	testCompile "org.mockito:mockito-core:2.23.4"
 }
 
 sourceSets {
@@ -56,26 +54,17 @@ task javadocWithLinks(type: Javadoc) {
 	}
 }
 task javadocJar(type: Jar) {
-	classifier = 'javadoc'
 	from javadocWithLinks
 }
 task sourcesJar(type: Jar) {
-	classifier = 'sources'
 	from sourceSets.main.allSource
 }
 artifacts {
 	archives javadocJar, sourcesJar, shadowJar
 }
 
-//
-// Configuration for creating single jar (with all dependant packages renamed to avoid potential conflicts).
-// Can be used with `gradle install publish`, where `install` required to create src and javadoc jars
-// and `publish` will create shadowed jar (see also https://github.com/johnrengelman/shadow/issues/120).
-//
 shadowJar {
-	baseName = 'vcsreader'
 	version = version
-	classifier = null
 	relocate 'org.intellij', 'shadow.org.intellij'
 	relocate 'org.jetbrains', 'shadow.org.jetbrains'
 	relocate 'org.mozilla', 'shadow.org.mozilla'

@@ -4,6 +4,8 @@
     <modules>
       <module fileurl="file://$PROJECT_DIR$/vcs-reader.iml" filepath="$PROJECT_DIR$/vcs-reader.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/vcsreader.iml" filepath="$PROJECT_DIR$/.idea/modules/vcsreader.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/vcsreader_main.iml" filepath="$PROJECT_DIR$/.idea/modules/vcsreader_main.iml" group="vcsreader" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/vcsreader_test.iml" filepath="$PROJECT_DIR$/.idea/modules/vcsreader_test.iml" group="vcsreader" />
     </modules>
   </component>
 </project>
