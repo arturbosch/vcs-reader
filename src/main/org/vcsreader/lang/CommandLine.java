@@ -14,7 +14,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -219,10 +219,10 @@ public class CommandLine {
 		private final Charset outputCharset;
 		private final boolean charsetAutoDetect;
 		private final int maxBufferForCharsetDetection;
-		private final ExecutorService asyncExecutor;
+		private final Executor asyncExecutor;
 
 		public Config(File workingDir, int stdoutBufferSize, int stderrBufferSize, Charset outputCharset,
-					  boolean charsetAutoDetect, int maxBufferForCharsetDetection, ExecutorService asyncExecutor) {
+					  boolean charsetAutoDetect, int maxBufferForCharsetDetection, Executor asyncExecutor) {
 			this.workingDir = workingDir;
 			this.stdoutBufferSize = stdoutBufferSize;
 			this.stderrBufferSize = stderrBufferSize;
@@ -247,7 +247,7 @@ public class CommandLine {
 					maxBufferForCharsetDetection, asyncExecutor);
 		}
 
-		public Config asyncExecutor(ExecutorService newAsyncExecutor) {
+		public Config asyncExecutor(Executor newAsyncExecutor) {
 			return new Config(workingDir, stdoutBufferSize, stderrBufferSize, outputCharset, charsetAutoDetect, maxBufferForCharsetDetection, newAsyncExecutor);
 		}
 	}
